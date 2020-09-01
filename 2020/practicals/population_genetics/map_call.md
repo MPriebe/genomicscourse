@@ -6,7 +6,7 @@ Roddy Pracana and Yannick Wurm
 
 There are several types of variants. Commonly, people look at single nucleotide polymorphisms (SNPs, sometimes also known as single nucleotide variants, SNVs). Other classes include small insertions and deletions (known collectively as indels), as well as larger structural variants, such as large insertions, deletions, inversions and translocations.
 
-There are several approaches to variant calling from short pair-end reads. We are going to use one of them. First, we will map the reads from each individual to a reference assembly similar to the one created in the [previous practical](../reference_genome/read-cleaning). Then we will find the positions where at least some of the individuals differ from the reference (and each other).
+There are several approaches to variant calling from short pair-end reads. We are going to use one of them. First, we will map the reads from each individual to a reference assembly similar to the one created in the [previous practical](../reference_genome/assembly) (you can use your assembly too, but that is better left as an exercise for later!). Then we will find the positions where at least some of the individuals differ from the reference (and each other).
 
 ## Pipeline
 
@@ -20,20 +20,17 @@ The aim of this practical is to genotype these 14 individuals. The steps in the 
 3. Filter the SNP calls to produce a set of good-quality SNPs.
 4. Visualise the alignments and the SNP calls in the genome browser `igv`.
 
-We recommend that you set up a directory for this work following the same principles as in the last few practicals. You should have subdirectories called `input`, `results` and `tmp` and a `WHATIDID.txt` file in which to log your commands:
+We recommend that you set up a directory for this work following the same principles as in the last few practicals (e.g., `2020-10-xx-mapping`). You should have subdirectories called `input`, `results` and `tmp` and a `WHATIDID.txt` file in which to log your commands. Symlink the reference genome `/shared/data/popgen/reference.fa` and the directory containing the reads `/shared/data/popgen/reads` to `input` subdirectory:
 
 ```bash
 2020-10-xx-mapping/
-├── input  
-│   ├── -> /import/teaching/bio/data/popgen/reference.fa
-│   └── -> /import/teaching/bio/data/popgen/reads
+├── input
+│   ├── -> /shared/data/popgen/reference.fa
+│   └── -> /shared/data/popgen/reads
 ├── results
 ├── tmp
 └── WHATIDID.txt
-
 ```
-
-For the first step of the pipeline, symlink the file `/shared/data/popgen/reference.fa` and the directory `/shared/data/popgen/reads` to `~/2020-10-xx-mapping/input/`.
 
 Check how many scaffolds there are in the reference genome:
 
@@ -57,7 +54,6 @@ In the first step, the scaffold sequence (sometimes known as the database) is in
 
 ```bash
 # Symlink reference.fa to tmp/
-
 ln -s ~/2020-10-xx-mapping/input/reference.fa tmp/
 
 # Build the index now.
@@ -67,43 +63,45 @@ bowtie2-build tmp/reference.fa tmp/reference
 The second step is the alignment itself:
 
 ```bash
+# Create directory for the alignments.
 mkdir tmp/alignments
 
-bowtie2 -x tmp/reference -1 input/reads/f1_B.1.fq.gz -2 input/reads/f1_B.2.fq.gz > tmp/alignments/f1_B.sam
+# Use bowtie2 to align paired reads from f1_B sample to the reference.
+bowtie2 --local -x tmp/reference -1 input/reads/f1_B.1.fq.gz -2 input/reads/f1_B.2.fq.gz > tmp/alignments/f1_B.sam
 ```
 
 * What is the meaning of the `-1` and `-2` parameters?
+* Why do we use `--local` parameter?
 
-The command produced a SAM file (Sequence Alignment/Map file), which is the standard file used to store sequence alignments. Have a quick look at the file using `less`. The file includes a header (lines starting with the `@` symbol), and a line for every read aligned to the reference assembly. For each read, we are given a mapping quality values, the position of both pairs, the actual sequence and its quality by base pair, and a series of flags with additional measures of mapping quality.
+The command produced a SAM file (Sequence Alignment/Map file), which is the standard file used to store sequence alignments. Have a quick look at the file using `less`. The file includes a header (lines starting with the `@` symbol), and a line for every read aligned to the reference assembly. For each read, we are given a mapping quality value, the position of both pairs, the actual sequence and its quality by base pair, and a series of flags with additional measures of mapping quality.
 
-We now need to run `bowtie2` for all the other samples. We could do this by typing the same command another 13 times (changing the sample name), or we can use the `GNU parallel` tool, which allows to run the same command on several samples at once:
+We now need to run `bowtie2` for all the other samples. We could do this by typing the same command another 13 times (changing the sample name), or we can use the `GNU parallel` tool, which allows you to run the same command on several samples at once:
 
 ```bash
 # Create a file with all sample names
 ls input/reads/*fq.gz | cut -d '/' -f 3 | cut -d '.' -f 1 | sort | uniq > tmp/names.txt
 
 # Run bowtie with each sample (will take a few minutes)
-cat tmp/names.txt | parallel -t "bowtie2 -x tmp/reference -1 input/reads/{}.1.fq.gz -2 input/reads/{}.2.fq.gz > tmp/alignments/{}.sam"
+cat tmp/names.txt | parallel -t "bowtie2 --local -x tmp/reference -1 input/reads/{}.1.fq.gz -2 input/reads/{}.2.fq.gz > tmp/alignments/{}.sam"
 ```
 
 Because SAM files include a lot of information, they tend to occupy a lot of space (even with our small example data). Therefore, SAM files are generally compressed into BAM files (Binary sAM). Most tools that use aligned reads require BAM files that have been sorted and indexed by genomic position. This is done using `samtools`, a set of tools created to manipulate SAM/BAM files:
 
 ```bash
-# samtools view: compresses the SAM to BAM
-# samtools sort: sorts by scaffold position (creates f1_B.bam)
-# Note that the argument "-" stands for the input that is being piped in
-samtools view -b tmp/alignments/f1_B.sam | samtools sort - > tmp/alignments/f1_B.bam
+# Sort the SAM file by scaffold position and output in BAM format.
+samtools sort -O BAM tmp/alignments/f1_B.sam > tmp/alignments/f1_B.bam
 
-## This creates a file (f1_B.bam), which we then index
-samtools index tmp/alignments/f1_B.bam   # creates f1_B.bam.bai
-
+# Index the BAM file generated above (creates f1_B.bam.bai).
+samtools index tmp/alignments/f1_B.bam
 ```
 
 Again, we can use `parallel` to run this step for all the samples:
 
 ```bash
-cat tmp/names.txt | parallel -t "samtools view -b tmp/alignments/{}.sam | samtools sort - > tmp/alignments/{}.bam"
+# For each sample, sort the SAM file for each and convert to BAM.
+cat tmp/names.txt | parallel -t "samtools sort -O BAM tmp/alignments/{}.sam > tmp/alignments/{}.bam"
 
+# Index the BAM file for each sample.
 cat tmp/names.txt | parallel -t "samtools index tmp/alignments/{}.bam"
 ```
 
@@ -112,9 +110,10 @@ Now check that a `bam` and a `bai` exist for each sample.
 To view what's in a BAM file, you have to use `samtools view`
 
 ```bash
+# View the entire BAM file:
 samtools view tmp/alignments/f1_B.bam | less -S
 
-# To view a particular region:
+# View a particular region of the reference:
 samtools view tmp/alignments/f1_B.bam scaffold_1:10000-10500 | less -S
 ```
 
@@ -123,34 +122,31 @@ Copy the `.bam` and `.bai` files to the `results` directory.
 ```bash
 cp tmp/alignments/*.bam results/
 cp tmp/alignments/*.bai results/
-
 ```
 
 
 ## Variant calling
 
-Set up a new directory for the second part of today's practical (`2020-10-xx-genotyping`). You will want to set up the relevant subdirectories and `WHATIDID.txt` file as before. Then create symlinks from `/shared/data/popgen/reference.fa` and the `results` from the mapping part of the practical to your `input` directory. Remember to keep your commands in the `WHATIDID.txt` file.
+Set up a new directory for the second part of today's practical (e.g., `2020-10-xx-genotyping`). You will want to set up the relevant subdirectories and `WHATIDID.txt` file as before. Then symlink the reference genome `/shared/data/popgen/reference.fa` and the alignments from the mapping part of the practical (both `.bam` and `.bai` files) to your `input` directory. Remember to keep your commands in the `WHATIDID.txt` file.
 
 ```
 2020-10-xx-genotyping/
-├── input  
-│   ├── -> /import/teaching/bio/data/popgen/reference.fa
-│   └── -> ~/2020-10-xx-mapping/results/*
+├── input
+│   ├── -> /shared/data/popgen/reference.fa
+│   ├── -> ~/2020-10-xx-mapping/results/f1_B.bam
+│   ├── -> ~/2020-10-xx-mapping/results/f1_B.bam.bai
+│   └── -> ...
 ├── results
 ├── tmp
 └── WHATIDID.txt
-
 ```
 
-There are several approaches to call variants. The simplest approach is to look for positions where the mapped reads consistently have a different base than the reference assembly (the consensus approach). We need to run two steps, `samtools mpileup`, which looks for inconsistencies between the reference and the aligned reads, and `bcftools call`, which interprets them as variants.
+There are several approaches to call variants. The simplest approach is to look for positions where the mapped reads consistently have a different base than the reference assembly (the consensus approach). We need to run two steps, `bcftools mpileup`, which looks for inconsistencies between the reference and the aligned reads, and `bcftools call`, which interprets them as variants.
 
 We will use multiallelic caller (option `-m`) of bcftools and set all individuals as haploid.
 
 ```bash
-# Step 1: samtools mpileup
-
 # Symlink reference.fa to tmp/
-
 ln -s ~/2020-10-xx-genotyping/input/reference.fa tmp/
 
 # Create index of the reference (different from that used by bowtie2)
@@ -158,11 +154,10 @@ samtools faidx tmp/reference.fa
 
 # Run samtools mpileup
 mkdir tmp/variants
-samtools mpileup -uf tmp/reference.fa input/*.bam > tmp/variants/raw_calls.bcf
+bcftools mpileup -Ou -f tmp/reference.fa input/*.bam > tmp/variants/raw_calls.bcf
 
 # Run bcftools call
 bcftools call --ploidy 1 -v -m tmp/variants/raw_calls.bcf > tmp/variants/calls.vcf
-
 ```
 
 * Do you understand why we are using the `-v` option in `bcftools call`? Is it ever useful to leave it out?
@@ -185,8 +180,8 @@ Not all variants that we called are necessarily of good quality, so it is essent
 We will filter the VCF using `bcftools filter`. We can remove anything with quality call smaller than 30:
 
 ```bash
+# Remove variant site with quality score less than 30. Then remove sites that have a missing genotype call.
 bcftools filter --exclude 'QUAL < 30' tmp/variants/calls.vcf | bcftools view -g ^miss > tmp/variants/filtered_calls.vcf
-
 ```
 
 In more serious analyses, it may be important to filter by other parameters.
@@ -197,8 +192,8 @@ In the downstream analysis, we only want to look at sites that are:
 3. where the minor allele is present in at least one individual (because we do not care for the sites where all individuals are different from the reference, yet equal to each other)
 
 ```bash
+# Select biallelic variant sites that are snps and at least one individual differs from the rest.
 bcftools view -v snps -m2 -M2 --min-ac 1:minor tmp/variants/filtered_calls.vcf > tmp/variants/snp.vcf
-
 ```
 
 * How many SNPs does the resulting VCF file have?
@@ -209,7 +204,6 @@ Now that we have a SNP set, we can copy it to `results` directory.
 
 ```bash
 cp tmp/variants/snp.vcf results
-
 ```
 
 ## Viewing the results using IGV (Integrative Genome Viewer)
