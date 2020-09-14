@@ -12,7 +12,7 @@ In the second part, we are going to measure genetic differentiation between the 
 
 ## Input into R
 
-Again, make a directory for this practical (e.g., `2020-10-xx-population_genetics`). Copy over the R markdown notebook `/shared/data/popgen/popgen.Rmd` to your project directory. Create `input/` subdirectory and symlink the `snp.vcf` file we created in the last practical to it. If you don't have this file, you can download it from [here](../../data/popgen/vcf/snp.vcf.gz?raw=true "Download vcf") and uncompress it.
+Again, make a directory for this practical (e.g., `2020-10-xx-population_genetics`). Copy over the R markdown notebook `/shared/data/popgen/popgen.Rmd` to your project directory. Create `input/` subdirectory and symlink the `snp.vcf.gz` and `snp.vcf.gz.tbi` file we created in the last practical to it. If you don't have this file, you can download it from [here](../../data/popgen/vcf/snp.vcf.gz?raw=true "Download vcf") - make sure to index it!
 
 ```bash
 2020-10-xx-population_genetics
@@ -21,4 +21,4 @@ Again, make a directory for this practical (e.g., `2020-10-xx-population_genetic
 └── popgen.Rmd
 ```
 
-Next, open Rstudio by typing your IP followed by `:8787` in a browser. Login using the same username and password that you use for ssh. In Rstudio, open the file `popgen.Rmd` and work through the rest of the practical there.
+Next, open Rstudio by entering your address in a web browser (e.g., james.genomicscourse.com) and clicking on the 'rstudio' link in the displayed page. Login using your username (e.g., james) and the password that you use for ssh. In Rstudio, open the file `popgen.Rmd` and work through the rest of the practical there.
